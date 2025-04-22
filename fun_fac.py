@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from itertools import zip_longest
 import numpy as np
+import swifter
 # 详细说明文档参看飞书文档
 def get_files_by_subfolder(folder_path):
     """
@@ -79,7 +80,7 @@ def cal_win(series,df_1):
             cor_time = cur_time + np.timedelta64(k,'s')
             cor_trade = df_1[df_1['timestamp'] == cor_time]
             weight_price_j = cal_wei_price(cor_trade)
-        weight_price.append({j:cal_wei_price(cor_trade)})
+        weight_price.append({j:weight_price_j})
     return weight_price
     
 def gerner_win(args):
@@ -104,7 +105,7 @@ def gerner_win(args):
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
     df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
-    df_3['time_win'] = df_3.apply(cal_win,axis=1,args=(df_1,))
+    df_3['time_win'] = df_3.swifter.apply(cal_win,axis=1,args=(df_1,))
     # for i in range(df_3.shape[0]):
     #     if df_3.iloc[i]['market_time'] < start_time or df_3.iloc[i]['market_time'] > end_time:
     #         continue
