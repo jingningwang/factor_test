@@ -74,7 +74,6 @@ def cal_win(args):
     df_2:snap
     df_3:order
     返回:
-    list: 包含盈利的列表
     """
     i,j,df_1,df_2,df_3 = args
     # df_1,df_2,df_3 = list[0],list[1],list[2]
