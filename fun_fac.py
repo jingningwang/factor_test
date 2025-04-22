@@ -40,11 +40,39 @@ def cal_wei_price(df):
         wei_price = total_sum / sum_vol
     return wei_price
 
+def cal_type(series):
+    cur_flag = series['flag']
+    cur_price = series['price']
+    cur_vol = series['volume']
+    bid_1 = series['buy_delegations'][0]['price']
+    bid_vol_1 = series['buy_delegations'][0]['volume']
+    ask_1 = series['sell_delegations'][0]['price']
+    ask_vol_1 = series['sell_delegations'][0]['volume']
+
+    if cur_flag == 'B':
+        if (cur_price > ask_1) and (cur_vol > ask_vol_1):
+            return 'type1'
+        elif (cur_price == ask_1) and (cur_vol > ask_vol_1):
+            return 'type2'
+        else :
+            return 'other'
+    else :
+        if (cur_price < bid_1) and (cur_vol > bid_vol_1):
+            return  'type7'
+        elif (cur_price == bid_1) and (cur_vol > bid_vol_1):
+            return 'type8'
+        else:
+            return 'other'
+        
+    ""
 def cal_win(args):
     """
     计算盈利
     参数:
     list (list): 某一只股票的三个数据信息
+    df_1:trade
+    df_2:snap
+    df_3:order
     返回:
     list: 包含盈利的列表
     """
@@ -52,81 +80,41 @@ def cal_win(args):
     # df_1,df_2,df_3 = list[0],list[1],list[2]
     start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
     end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
-
+    df_3 = df_3.sort_values(by='market_time')
+    order_snap_df = pd.merge_asof(df_3,df_2,
+                                  left_on='market_time',right_on='market_time',
+                                  direction='backward' )
     # 进行类型划分
+    order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
+    df_3 = order_snap_df[order_snap_df['type_agg']!='other']
     for i in range(df_3.shape[0]):
-        if df_3.loc[i]['market_time'] < start_time or df_3.loc[i]['market_time'] > end_time:
+        if df_3.iloc[i]['market_time'] < start_time or df_3.iloc[i]['market_time'] > end_time:
             continue
-        current_order = df_3.loc[i]
-        # 获取挂单方向
-        cur_flag = current_order['flag']
+        current_order = df_3.iloc[i]
         # 获取挂单价格
         cur_price = current_order['price']
-        # 获取挂单量
+        # 获取挂单量'
         cur_vol = current_order['volume']
         # 获取时间
         cur_time = current_order['market_time']
 
-        # 获取快照数据
-        if (df_2['market_time'].isin(['cur_time']).any()):
-            cor_market = df_2[df_2['market_time'] ==  cur_time ]
-        else:
-            prev_snap = df_2[df_2['market_time'] < cur_time]
-            if not prev_snap.empty:
-                cor_market = prev_snap.iloc[-1:]
-            else:
-                continue
-        # print(cor_market)
-        # 获取买 1 价和交易量, 买一价和交易量
-        bid_1 = cor_market['buy_delegations'].iloc[0][0]['price']
-        bid_vol_1 = cor_market['buy_delegations'].iloc[0][0]['volume']
-        bid_2 = cor_market['buy_delegations'].iloc[0][1]['price']
-
-        ask_1 = cor_market['sell_delegations'].iloc[0][0]['price']
-        ask_vol_1 = cor_market['sell_delegations'].iloc[0][0]['volume']
-        ask_2 = cor_market['sell_delegations'].iloc[0][1]['price']
-
-        # 对当前订单进行判断攻击性类型
-        if cur_flag == 'B':
-            if (cur_price > ask_1) and (cur_vol > ask_vol_1):
-                df_3.loc[i,'type_agg'] = 'type1'
-            elif (cur_price == ask_1) and (cur_vol > ask_vol_1):
-                df_3.loc[i,'type_agg'] = 'type2'
-        else :
-            if (cur_price < bid_1) and (cur_vol > bid_vol_1):
-                df_3.loc[i,'type_agg'] = 'type7'
-            elif (cur_price == bid_1) and (cur_vol > bid_vol_1):
-                df_3.loc[i,'type_agg'] = 'type8'
-
-    for i in range(df_3.shape[0]):
-        if df_3.loc[i]['market_time'] < start_time or df_3.loc[i]['market_time'] > end_time:
-            continue
-        if df_3.loc[i]['type_agg'] in ['type1','type2','type7','type8']:
-            current_order = df_3.loc[i]
-            # 获取挂单价格
-            cur_price = current_order['price']
-            # 获取挂单量'
-            cur_vol = current_order['volume']
-            # 获取时间
-            cur_time = current_order['market_time']
-
-            # 获取交易窗口数据
-            weight_price = []
-            for j in range(-10,21):
-                k = j
-                cor_time = cur_time + np.timedelta64(j, 's')
+        # 获取交易窗口数据
+        weight_price = []
+        for j in range(-10,21):
+            k = j
+            cor_time = cur_time + np.timedelta64(j, 's')
+            cor_trade = df_1[df_1['timestamp'] == cor_time]
+            weight_price_j = cal_wei_price(cor_trade)
+            while weight_price_j == 0:
+                k -= 1
+                cor_time = cur_time + np.timedelta64(k,'s')
                 cor_trade = df_1[df_1['timestamp'] == cor_time]
                 weight_price_j = cal_wei_price(cor_trade)
-                while weight_price_j == 0:
-                    k -= 1
-                    cor_time = cur_time + np.timedelta64(k,'s')
-                    cor_trade = df_1[df_1['timestamp'] == cor_time]
-                    weight_price_j = cal_wei_price(cor_trade)
-                weight_price.append({j:cal_wei_price(cor_trade)})
+            weight_price.append({j:cal_wei_price(cor_trade)})
 
-            if 'time_win' not in df_3.columns:
-                df_3['time_win'] = None
-            df_3.at[i,'time_win'] = weight_price
+        # if 'time_win' not in df_3.columns:
+        #     df_3['time_win'] = None
+        df_3.iloc[i,'time_win'] = weight_price
 
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
@@ -175,13 +163,6 @@ def cal_win(args):
 
     # 一级平均
     return (i,j,type_1_avg_1,type_2_avg_1,type_7_avg_1,type_8_avg_1)
-
-def process_rows(row_data):
-    row1,row2,row3 = row_data
-    result = []
-    for val1,val2,val3 in zip_longest(row1,row2,row3,fillvalue = None):
-        result.append([val1,val2,val3])
-    return result
 
 def norm(df):
     for k in range(df.shape[0]):
