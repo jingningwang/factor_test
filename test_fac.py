@@ -25,7 +25,7 @@ if __name__ == "__main__":
             tasks.append((i,j,a,b,c))
 
     with multiprocessing.Pool() as pool:
-        results = pool.map(cal_win, tasks)
+        results = pool.map(gerner_win, tasks)
     
     type_1 = [[0] * len(df1_list[0]) for _ in range(len(df1_list))]
     type_2 = [[0] * len(df1_list[0]) for _ in range(len(df1_list))]

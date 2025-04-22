@@ -63,9 +63,26 @@ def cal_type(series):
             return 'type8'
         else:
             return 'other'
-        
-    ""
-def cal_win(args):
+
+def cal_win(series,df_1):
+    cur_price = series['price']
+    cur_vol = series['volume']
+    cur_time = series['market_time']
+    weight_price = []
+    for j in range(-10,21):
+        k = j
+        cor_time = cur_time + np.timedelta64(j, 's')
+        cor_trade = df_1[df_1['timestamp'] == cor_time]
+        weight_price_j = cal_wei_price(cor_trade)
+        while weight_price_j == 0:
+            k -= 1
+            cor_time = cur_time + np.timedelta64(k,'s')
+            cor_trade = df_1[df_1['timestamp'] == cor_time]
+            weight_price_j = cal_wei_price(cor_trade)
+        weight_price.append({j:cal_wei_price(cor_trade)})
+    return weight_price
+    
+def gerner_win(args):
     """
     计算盈利
     参数:
@@ -86,34 +103,36 @@ def cal_win(args):
     # 进行类型划分
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
-    for i in range(df_3.shape[0]):
-        if df_3.iloc[i]['market_time'] < start_time or df_3.iloc[i]['market_time'] > end_time:
-            continue
-        current_order = df_3.iloc[i]
-        # 获取挂单价格
-        cur_price = current_order['price']
-        # 获取挂单量'
-        cur_vol = current_order['volume']
-        # 获取时间
-        cur_time = current_order['market_time']
+    df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
+    df_3['time_win'] = df_3.apply(cal_win,axis=1,args=(df_1,))
+    # for i in range(df_3.shape[0]):
+    #     if df_3.iloc[i]['market_time'] < start_time or df_3.iloc[i]['market_time'] > end_time:
+    #         continue
+    #     current_order = df_3.iloc[i]
+    #     # 获取挂单价格
+    #     cur_price = current_order['price']
+    #     # 获取挂单量'
+    #     cur_vol = current_order['volume']
+    #     # 获取时间
+    #     cur_time = current_order['market_time']
 
-        # 获取交易窗口数据
-        weight_price = []
-        for j in range(-10,21):
-            k = j
-            cor_time = cur_time + np.timedelta64(j, 's')
-            cor_trade = df_1[df_1['timestamp'] == cor_time]
-            weight_price_j = cal_wei_price(cor_trade)
-            while weight_price_j == 0:
-                k -= 1
-                cor_time = cur_time + np.timedelta64(k,'s')
-                cor_trade = df_1[df_1['timestamp'] == cor_time]
-                weight_price_j = cal_wei_price(cor_trade)
-            weight_price.append({j:cal_wei_price(cor_trade)})
+    #     # 获取交易窗口数据
+    #     weight_price = []
+    #     for j in range(-10,21):
+    #         k = j
+    #         cor_time = cur_time + np.timedelta64(j, 's')
+    #         cor_trade = df_1[df_1['timestamp'] == cor_time]
+    #         weight_price_j = cal_wei_price(cor_trade)
+    #         while weight_price_j == 0:
+    #             k -= 1
+    #             cor_time = cur_time + np.timedelta64(k,'s')
+    #             cor_trade = df_1[df_1['timestamp'] == cor_time]
+    #             weight_price_j = cal_wei_price(cor_trade)
+    #         weight_price.append({j:cal_wei_price(cor_trade)})
 
-        # if 'time_win' not in df_3.columns:
-        #     df_3['time_win'] = None
-        df_3.iloc[i,'time_win'] = weight_price
+    #     # if 'time_win' not in df_3.columns:
+    #     #     df_3['time_win'] = None
+    #     df_3.iloc[i,'time_win'] = weight_price
 
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
