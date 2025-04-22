@@ -12,6 +12,8 @@ folder_path_1 = 'quote/trade_in_hour'
 folder_path_2 = 'quote/snap_in_hour'
 folder_path_3 = 'quote/order_in_hour'
 
+"测试"
+
 df1_list = get_files_by_subfolder(folder_path_1)
 df2_list = get_files_by_subfolder(folder_path_2)
 df3_list = get_files_by_subfolder(folder_path_3)
