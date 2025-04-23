@@ -97,6 +97,7 @@ def gerner_win(args):
     # df_1,df_2,df_3 = list[0],list[1],list[2]
     start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
     end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
+    df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
     df_3 = df_3.sort_values(by='market_time')
     order_snap_df = pd.merge_asof(df_3,df_2,
                                   left_on='market_time',right_on='market_time',
@@ -104,37 +105,7 @@ def gerner_win(args):
     # 进行类型划分
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
-    df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
     df_3['time_win'] = df_3.swifter.apply(cal_win,axis=1,args=(df_1,))
-    # for i in range(df_3.shape[0]):
-    #     if df_3.iloc[i]['market_time'] < start_time or df_3.iloc[i]['market_time'] > end_time:
-    #         continue
-    #     current_order = df_3.iloc[i]
-    #     # 获取挂单价格
-    #     cur_price = current_order['price']
-    #     # 获取挂单量'
-    #     cur_vol = current_order['volume']
-    #     # 获取时间
-    #     cur_time = current_order['market_time']
-
-    #     # 获取交易窗口数据
-    #     weight_price = []
-    #     for j in range(-10,21):
-    #         k = j
-    #         cor_time = cur_time + np.timedelta64(j, 's')
-    #         cor_trade = df_1[df_1['timestamp'] == cor_time]
-    #         weight_price_j = cal_wei_price(cor_trade)
-    #         while weight_price_j == 0:
-    #             k -= 1
-    #             cor_time = cur_time + np.timedelta64(k,'s')
-    #             cor_trade = df_1[df_1['timestamp'] == cor_time]
-    #             weight_price_j = cal_wei_price(cor_trade)
-    #         weight_price.append({j:cal_wei_price(cor_trade)})
-
-    #     # if 'time_win' not in df_3.columns:
-    #     #     df_3['time_win'] = None
-    #     df_3.iloc[i,'time_win'] = weight_price
-
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
     index7 = df_3[df_3['type_agg']=='type7']['market_time']
