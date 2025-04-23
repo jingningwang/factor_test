@@ -7,7 +7,6 @@ from itertools import zip_longest
 import multiprocessing
 from multiprocessing import Pool
 from fun_fac import *
-import tqdm
 
 folder_path_1 = 'quote/trade_in_hour'
 folder_path_2 = 'quote/snap_in_hour'
