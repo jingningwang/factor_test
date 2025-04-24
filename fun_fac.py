@@ -3,6 +3,7 @@ import pandas as pd
 from itertools import zip_longest
 import numpy as np
 import swifter
+from scipy.stats import pearsonr, spearmanr
 # 详细说明文档参看飞书文档
 def get_files_by_subfolder(folder_path):
     """
@@ -97,6 +98,7 @@ def gerner_win(args):
     # df_1,df_2,df_3 = list[0],list[1],list[2]
     start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
     end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
+    df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
     df_3 = df_3.sort_values(by='market_time')
     order_snap_df = pd.merge_asof(df_3,df_2,
                                   left_on='market_time',right_on='market_time',
@@ -104,37 +106,7 @@ def gerner_win(args):
     # 进行类型划分
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
-    df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
     df_3['time_win'] = df_3.swifter.apply(cal_win,axis=1,args=(df_1,))
-    # for i in range(df_3.shape[0]):
-    #     if df_3.iloc[i]['market_time'] < start_time or df_3.iloc[i]['market_time'] > end_time:
-    #         continue
-    #     current_order = df_3.iloc[i]
-    #     # 获取挂单价格
-    #     cur_price = current_order['price']
-    #     # 获取挂单量'
-    #     cur_vol = current_order['volume']
-    #     # 获取时间
-    #     cur_time = current_order['market_time']
-
-    #     # 获取交易窗口数据
-    #     weight_price = []
-    #     for j in range(-10,21):
-    #         k = j
-    #         cor_time = cur_time + np.timedelta64(j, 's')
-    #         cor_trade = df_1[df_1['timestamp'] == cor_time]
-    #         weight_price_j = cal_wei_price(cor_trade)
-    #         while weight_price_j == 0:
-    #             k -= 1
-    #             cor_time = cur_time + np.timedelta64(k,'s')
-    #             cor_trade = df_1[df_1['timestamp'] == cor_time]
-    #             weight_price_j = cal_wei_price(cor_trade)
-    #         weight_price.append({j:cal_wei_price(cor_trade)})
-
-    #     # if 'time_win' not in df_3.columns:
-    #     #     df_3['time_win'] = None
-    #     df_3.iloc[i,'time_win'] = weight_price
-
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
     index7 = df_3[df_3['type_agg']=='type7']['market_time']
@@ -154,12 +126,15 @@ def gerner_win(args):
     type_7_df = pd.DataFrame(type7_win)
     type_8_df = pd.DataFrame(type8_win)
 
-    for i in range (-10,21):
-        type_1_df[str(i)]=type_1_df['time_win'].apply(lambda x: x[i+10][i])
-        type_2_df[str(i)]=type_2_df['time_win'].apply(lambda x: x[i+10][i])
-        type_7_df[str(i)]=type_7_df['time_win'].apply(lambda x: x[i+10][i])
-        type_8_df[str(i)]=type_8_df['time_win'].apply(lambda x: x[i+10][i])
+    for k in range (-10,21):
+        type_1_df[str(k)]=type_1_df['time_win'].apply(lambda x: x[k+10][k])
+        type_2_df[str(k)]=type_2_df['time_win'].apply(lambda x: x[k+10][k])
+        type_7_df[str(k)]=type_7_df['time_win'].apply(lambda x: x[k+10][k])
+        type_8_df[str(k)]=type_8_df['time_win'].apply(lambda x: x[k+10][k])
 
+    # type_1_df的时间窗口在列上面，每一列对应一个时间窗口
+    # 有些股票的时间一样,时间窗口一样,将其删去
+    # type_1_gr的index是时间，纵坐标从-10到20
     type_1_gr = type_1_df.groupby(level=0).min()
     type_1_gr = type_1_gr.iloc[:,1:]
     type_2_gr = type_2_df.groupby(level=0).min()
@@ -179,6 +154,7 @@ def gerner_win(args):
     type_2_avg_1 = type_2_gr.mean(axis = 0)
     type_7_avg_1 = type_7_gr.mean(axis = 0)
     type_8_avg_1 = type_8_gr.mean(axis = 0)
+    # type_1_avg_1得到一个series,index是-20到10
 
     # 一级平均
     return (i,j,type_1_avg_1,type_2_avg_1,type_7_avg_1,type_8_avg_1)
@@ -195,3 +171,21 @@ def norm(df):
                 df.iloc[k,i] = df.iloc[k,i] *100 / df.iloc[k,10]
             df.iloc[k,10] = 100
     return df
+
+def cal_cor(df):
+    """
+    输入:
+    df:每一列对应一直股票一天的时间窗口
+       每一行对应一个时刻所有股票所有日期的数据
+    输出:
+    cor:list,相关性检验结果
+    """
+    cor = []
+    for t in range(0,16):
+        vec_1 = df.loc[str(t)] - df.loc['-1'] 
+        vec_2 = df.loc[str(t+5)] - df.loc[str(t)]
+        cor.append(spearmanr(vec_1, vec_2))
+    return cor
+
+def return_rate(df):
+    
