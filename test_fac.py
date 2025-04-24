@@ -57,8 +57,8 @@ if __name__ == "__main__":
 
     series_list = [type_1_se, type_2_se, type_7_se, type_8_se]
     fig,axes = plt.subplots(2,2,figsize=(10,8))
-    for i,(ax,s) in enumerate(zip(axes.flat,series_list))
-        axes.plot(s.index,s.values,marker='o')
+    for i,(ax,s) in enumerate(zip(axes.flat,series_list)):
+        ax.plot(s.index,s.values,marker='o')
     
     plt.tight_layout()
     plt.savefig('type.png')

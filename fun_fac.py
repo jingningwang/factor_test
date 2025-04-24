@@ -4,6 +4,7 @@ from itertools import zip_longest
 import numpy as np
 import swifter
 from scipy.stats import pearsonr, spearmanr
+import tqdm
 # 详细说明文档参看飞书文档
 def get_files_by_subfolder(folder_path):
     """
@@ -66,23 +67,20 @@ def cal_type(series):
         else:
             return 'other'
 
-def cal_win(series,df_1):
+def cal_win(series,df_1,t):
     cur_price = series['price']
     cur_vol = series['volume']
     cur_time = series['market_time']
-    weight_price = []
-    for j in range(-10,21):
-        k = j
-        cor_time = cur_time + np.timedelta64(j, 's')
+
+    cor_time = cur_time + np.timedelta64(t, 's')
+    cor_trade = df_1[df_1['timestamp'] == cor_time]
+    weight_price_t = cal_wei_price(cor_trade)
+    while weight_price_t == 0:
+        t -= 1
+        cor_time = cur_time + np.timedelta64(t,'s')
         cor_trade = df_1[df_1['timestamp'] == cor_time]
-        weight_price_j = cal_wei_price(cor_trade)
-        while weight_price_j == 0:
-            k -= 1
-            cor_time = cur_time + np.timedelta64(k,'s')
-            cor_trade = df_1[df_1['timestamp'] == cor_time]
-            weight_price_j = cal_wei_price(cor_trade)
-        weight_price.append({j:weight_price_j})
-    return weight_price
+        weight_price_t = cal_wei_price(cor_trade)
+    return weight_price_t
     
 def gerner_win(args):
     """
@@ -95,7 +93,6 @@ def gerner_win(args):
     返回:
     """
     i,j,df_1,df_2,df_3 = args
-    # df_1,df_2,df_3 = list[0],list[1],list[2]
     start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
     end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
     df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
@@ -106,31 +103,29 @@ def gerner_win(args):
     # 进行类型划分
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
-    df_3['time_win'] = df_3.swifter.apply(cal_win,axis=1,args=(df_1,))
+    df_3 = df_3.copy()
+    for t in range(-10,21):
+        df_3.loc[:,str(t)] = df_3.apply(cal_win,axis=1,args=(df_1,t))
+
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
     index7 = df_3[df_3['type_agg']=='type7']['market_time']
     index8 = df_3[df_3['type_agg']=='type8']['market_time']
 
-    type1_win = df_3[df_3['type_agg']=='type1']['time_win']
+    time_win = [str(i) for i in range(-10,21)]
+    type1_win = df_3[df_3['type_agg']=='type1'][time_win]
     type1_win.index = index1
-    type2_win = df_3[df_3['type_agg']=='type2']['time_win']
+    type2_win = df_3[df_3['type_agg']=='type2'][time_win]
     type2_win.index = index2
-    type7_win = df_3[df_3['type_agg']=='type7']['time_win']
+    type7_win = df_3[df_3['type_agg']=='type7'][time_win]
     type7_win.index = index7
-    type8_win = df_3[df_3['type_agg']=='type8']['time_win']
+    type8_win = df_3[df_3['type_agg']=='type8'][time_win]
     type8_win.index = index8
 
     type_1_df = pd.DataFrame(type1_win)
     type_2_df = pd.DataFrame(type2_win)
     type_7_df = pd.DataFrame(type7_win)
     type_8_df = pd.DataFrame(type8_win)
-
-    for k in range (-10,21):
-        type_1_df[str(k)]=type_1_df['time_win'].apply(lambda x: x[k+10][k])
-        type_2_df[str(k)]=type_2_df['time_win'].apply(lambda x: x[k+10][k])
-        type_7_df[str(k)]=type_7_df['time_win'].apply(lambda x: x[k+10][k])
-        type_8_df[str(k)]=type_8_df['time_win'].apply(lambda x: x[k+10][k])
 
     # type_1_df的时间窗口在列上面，每一列对应一个时间窗口
     # 有些股票的时间一样,时间窗口一样,将其删去
@@ -188,4 +183,12 @@ def cal_cor(df):
     return cor
 
 def return_rate(df):
+    """
+    输入:
+    df:每一列对应一直股票一天的时间窗口
+       每一行对应一个时刻所有股票所有日期的数据
+    输出:
+    return_rate:list,回报率列表
+    """
+    return_rate = []
     
