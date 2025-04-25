@@ -2,11 +2,11 @@ import os
 import pandas as pd
 from itertools import zip_longest
 import numpy as np
-import swifter
+# import swifter
 from scipy.stats import pearsonr, spearmanr
 import tqdm
 # 详细说明文档参看飞书文档
-def get_files_by_subfolder(folder_path):
+def get_files_by_subfolder(folder_path,n):
     """
     遍历指定文件夹中的所有子文件夹，获取每个子文件夹中的文件。
     参数:
@@ -17,10 +17,10 @@ def get_files_by_subfolder(folder_path):
     folder_files = []
     subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
     subfolders.sort()
-    for root in subfolders[:1]:
+    for root in subfolders[:150]:
         files_in_subfolder = [os.path.join(root,filename) for filename in os.listdir(root)]
         files_in_subfolder.sort()
-        files_in_subfolder = [pd.read_json(path) for path in files_in_subfolder[:2]]
+        files_in_subfolder = [pd.read_json(path) for path in files_in_subfolder[n:n+1]]
         folder_files.append(files_in_subfolder)
     return folder_files
 
@@ -32,16 +32,11 @@ def cal_wei_price(df):
     返回:
     float: 加权平均价格
     """
-    total_sum = 0
-    for i in range(df.shape[0]):
-        temp_sum = df.iloc[i]['trade_price'] * df.iloc[i]['trade_volume']
-        total_sum += temp_sum 
-    sum_vol = sum(df[df['trade_price']!=0]['trade_volume'])
-    if sum_vol == 0:
-        wei_price = 0
-    else:
-        wei_price = total_sum / sum_vol
-    return wei_price
+    if df.empty:
+        return 0
+    total_sum = (df['trade_price']*df['trade_volume']).sum()
+    sum_vol = df.loc[df['trade_volume']!=0,'trade_volume'].sum()
+    return total_sum/sum_vol if sum_vol != 0 else 0
 
 def cal_type(series):
     cur_flag = series['flag']
@@ -68,10 +63,7 @@ def cal_type(series):
             return 'other'
 
 def cal_win(series,df_1,t):
-    cur_price = series['price']
-    cur_vol = series['volume']
     cur_time = series['market_time']
-
     cor_time = cur_time + np.timedelta64(t, 's')
     cor_trade = df_1[df_1['timestamp'] == cor_time]
     weight_price_t = cal_wei_price(cor_trade)
@@ -105,8 +97,12 @@ def gerner_win(args):
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
     df_3 = df_3.copy()
     for t in range(-10,21):
-        df_3.loc[:,str(t)] = df_3.apply(cal_win,axis=1,args=(df_1,t))
-
+        if df_3.apply(cal_win, axis=1, args=(df_1,t)).empty:
+            df_3.loc[:,str(t)] = pd.Series([np.nan for _ in range(df_3.shape[0])])
+            # print('某天没有某类型')
+        else:
+            df_3.loc[:,str(t)] = df_3.apply(cal_win, axis=1, args=(df_1,t))
+            
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
     index7 = df_3[df_3['type_agg']=='type7']['market_time']
@@ -127,19 +123,11 @@ def gerner_win(args):
     type_7_df = pd.DataFrame(type7_win)
     type_8_df = pd.DataFrame(type8_win)
 
-    # type_1_df的时间窗口在列上面，每一列对应一个时间窗口
-    # 有些股票的时间一样,时间窗口一样,将其删去
-    # type_1_gr的index是时间，纵坐标从-10到20
     type_1_gr = type_1_df.groupby(level=0).min()
-    type_1_gr = type_1_gr.iloc[:,1:]
     type_2_gr = type_2_df.groupby(level=0).min()
-    type_2_gr = type_2_gr.iloc[:,1:]
     type_7_gr = type_7_df.groupby(level=0).min()
-    type_7_gr = type_7_gr.iloc[:,1:]
     type_8_gr = type_8_df.groupby(level=0).min()
-    type_8_gr = type_8_gr.iloc[:,1:]
 
-    # 进行数据标准化过程
     type_1_gr = norm(type_1_gr)
     type_2_gr = norm(type_2_gr)
     type_7_gr = norm(type_7_gr)
@@ -149,7 +137,6 @@ def gerner_win(args):
     type_2_avg_1 = type_2_gr.mean(axis = 0)
     type_7_avg_1 = type_7_gr.mean(axis = 0)
     type_8_avg_1 = type_8_gr.mean(axis = 0)
-    # type_1_avg_1得到一个series,index是-20到10
 
     # 一级平均
     return (i,j,type_1_avg_1,type_2_avg_1,type_7_avg_1,type_8_avg_1)
