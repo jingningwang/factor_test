@@ -15,7 +15,7 @@ def get_files_by_subfolder(folder_path,n):
     subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
     subfolders.sort()
     all_dataframes = []
-    for root in subfolders[:150]:
+    for root in subfolders[:1]:
         files_in_subfolder = [os.path.join(root,filename) for filename in os.listdir(root)]
         files_in_subfolder.sort()
         files_in_subfolder = [pd.read_json(path) for path in files_in_subfolder[n:n+1]]
@@ -26,14 +26,14 @@ def get_files_by_subfolder(folder_path,n):
 def cal_wei_price(df):
     """
     input:
-    df (pandas.DataFrame): 包含'trade_price'和'trade_volume'列的 DataFrame
+    df : 包含'trade_price'和'trade_volume'列的 DataFrame
     output:
-    float: 加权平均价格
+    某个时刻的加权交易价格
     """
     if df.empty:
         return 0
     total_sum = (df['trade_price']*df['trade_volume']).sum()
-    sum_vol = df.loc[df['trade_volume']!=0,'trade_volume'].sum()
+    sum_vol = df.loc[df['trade_volume']>0,'trade_volume'].sum()
     return total_sum/sum_vol if sum_vol != 0 else 0
 
 def cal_type(series):
@@ -82,13 +82,12 @@ def gerner_win(df_1,df_2,df_3):
     """
     start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
     end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
-    df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
     df_3 = df_3.sort_values(by=['code','market_time'],ascending=[True,True])
     order_snap_df = pd.merge(df_3,df_2,on=['market_time','code'],how='left')
-    order_snap_df.fillna(method = 'ffill',inplace=True)
+    order_snap_df.ffill(inplace=True)
+    order_snap_df = order_snap_df[(order_snap_df['market_time']>start_time) & (order_snap_df['market_time']<end_time)]
 
     # 进行类型划分
-    tqdm.pandas()
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
     df_3 = df_3.copy()
@@ -96,35 +95,22 @@ def gerner_win(df_1,df_2,df_3):
     # 时间窗口生成
     for t in range(-10,21):
         if df_3.apply(cal_win, axis=1, args=(df_1,t)).empty:
+            # 该挂单对应时间没有交易信息, 返回空 dataframe
             df_3.loc[:,str(t)] = pd.Series([np.nan for _ in range(df_3.shape[0])])
         else:
-            tqdm.pandas()
-            df_3.loc[:,str(t)] = df_3.progress_apply(cal_win, axis=1, args=(df_1,t))
-            
-    index1 = df_3[df_3['type_agg']=='type1']['market_time']
-    index2 = df_3[df_3['type_agg']=='type2']['market_time']
-    index7 = df_3[df_3['type_agg']=='type7']['market_time']
-    index8 = df_3[df_3['type_agg']=='type8']['market_time']
+            df_3.loc[:,str(t)] = df_3.apply(cal_win, axis=1, args=(df_1,t))
 
-    time_win = [str(i) for i in range(-10,21)]
+    time_win = ['code','market_time']
+    time_win.extend( [str(i) for i in range(-10,21)])
     type1_win = df_3[df_3['type_agg']=='type1'][time_win]
-    type1_win.index = index1
     type2_win = df_3[df_3['type_agg']=='type2'][time_win]
-    type2_win.index = index2
     type7_win = df_3[df_3['type_agg']=='type7'][time_win]
-    type7_win.index = index7
     type8_win = df_3[df_3['type_agg']=='type8'][time_win]
-    type8_win.index = index8
 
-    type_1_df = pd.DataFrame(type1_win)
-    type_2_df = pd.DataFrame(type2_win)
-    type_7_df = pd.DataFrame(type7_win)
-    type_8_df = pd.DataFrame(type8_win)
-
-    type_1_gr = type_1_df.groupby(level=0).min()
-    type_2_gr = type_2_df.groupby(level=0).min()
-    type_7_gr = type_7_df.groupby(level=0).min()
-    type_8_gr = type_8_df.groupby(level=0).min()
+    type_1_gr = type1_win.groupby(['code','market_time']).min()
+    type_2_gr = type2_win.groupby(['code','market_time']).min()
+    type_7_gr = type7_win.groupby(['code','market_time']).min()
+    type_8_gr = type8_win.groupby(['code','market_time']).min()
 
     type_1_gr = norm(type_1_gr)
     type_2_gr = norm(type_2_gr)

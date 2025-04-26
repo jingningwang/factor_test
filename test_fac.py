@@ -21,20 +21,20 @@ if __name__ == "__main__":
     # type_2_avg_ = pd.DataFrame(np.nan,index =[i for i in range(-10,21)],columns = ['mo'])
     # type_7_avg_ = pd.DataFrame(np.nan,index =[i for i in range(-10,21)],columns = ['mo'])
     # type_8_avg_ = pd.DataFrame(np.nan,index =[i for i in range(-10,21)],columns = ['mo'])
-    for n in tqdm(range(0,20)):
+    for n in tqdm(range(0,2)):
         df_1 = get_files_by_subfolder(folder_path_1,n)
         df_2 = get_files_by_subfolder(folder_path_2,n)
         df_3 = get_files_by_subfolder(folder_path_3,n)
 
-        list_1 = ['code','flag','timestamp','trade_price','trade_volume']
+        list_1 = ['code','timestamp','trade_price','trade_volume']
         list_2 = ['market_time', 'code','buy_delegations','sell_delegations']
-        list_3 = ['code', 'price', 'volume','market_time']
+        list_3 = ['code','flag','price', 'volume','market_time']
         df_1 = df_1[list_1]
         df_2 = df_2[list_2]
         df_3 = df_3[list_3]
 
         res1, res2, res7, res8 = gerner_win(df_1,df_2,df_3)
-
+        print(res1, res2, res7, res8 )
         # tasks = []
         # for i,(row1,row2,row3) in enumerate(zip(df1_list, df2_list, df3_list)):
         #     for j,(a,b,c) in enumerate(zip(row1, row2, row3)):
