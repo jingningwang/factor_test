@@ -1,35 +1,33 @@
 import os
 import pandas as pd
-from itertools import zip_longest
 import numpy as np
-# import swifter
 from scipy.stats import pearsonr, spearmanr
-import tqdm
-# 详细说明文档参看飞书文档
+from tqdm import tqdm
+
 def get_files_by_subfolder(folder_path,n):
     """
     遍历指定文件夹中的所有子文件夹，获取每个子文件夹中的文件。
-    参数:
-    folder_path (str): 要遍历的文件夹路径
-    返回:
-    list[list[pandas]]: 包含每个子文件夹中的文件的列表
+    input:
+    folder_path: 要遍历的文件夹路径
+    output:
+    文件夹中指定部分的 json文件,并合成大的 dataframe
     """
-    folder_files = []
     subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
     subfolders.sort()
+    all_dataframes = []
     for root in subfolders[:150]:
         files_in_subfolder = [os.path.join(root,filename) for filename in os.listdir(root)]
         files_in_subfolder.sort()
         files_in_subfolder = [pd.read_json(path) for path in files_in_subfolder[n:n+1]]
-        folder_files.append(files_in_subfolder)
-    return folder_files
+        all_dataframes.extend(files_in_subfolder)
+    df = pd.concat(all_dataframes,axis=0)
+    return df
 
 def cal_wei_price(df):
     """
-    计算加权平均价格
-    参数:
-    df (pandas.DataFrame): 包含'trade_price'和'trade_volume'列的DataFrame
-    返回:
+    input:
+    df (pandas.DataFrame): 包含'trade_price'和'trade_volume'列的 DataFrame
+    output:
     float: 加权平均价格
     """
     if df.empty:
@@ -46,7 +44,6 @@ def cal_type(series):
     bid_vol_1 = series['buy_delegations'][0]['volume']
     ask_1 = series['sell_delegations'][0]['price']
     ask_vol_1 = series['sell_delegations'][0]['volume']
-
     if cur_flag == 'B':
         if (cur_price > ask_1) and (cur_vol > ask_vol_1):
             return 'type1'
@@ -74,34 +71,35 @@ def cal_win(series,df_1,t):
         weight_price_t = cal_wei_price(cor_trade)
     return weight_price_t
     
-def gerner_win(args):
+def gerner_win(df_1,df_2,df_3):
     """
-    计算盈利
-    参数:
-    list (list): 某一只股票的三个数据信息
+    input:
     df_1:trade
     df_2:snap
     df_3:order
-    返回:
+    output:
+    四种类型的交易价时间窗口
     """
-    i,j,df_1,df_2,df_3 = args
     start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
     end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
     df_3 = df_3[(df_3['market_time']>start_time) & (df_3['market_time']<end_time)]
-    df_3 = df_3.sort_values(by='market_time')
-    order_snap_df = pd.merge_asof(df_3,df_2,
-                                  left_on='market_time',right_on='market_time',
-                                  direction='backward' )
+    df_3 = df_3.sort_values(by=['code','market_time'],ascending=[True,True])
+    order_snap_df = pd.merge(df_3,df_2,on=['market_time','code'],how='left')
+    order_snap_df.fillna(method = 'ffill',inplace=True)
+
     # 进行类型划分
+    tqdm.pandas()
     order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
     df_3 = df_3.copy()
+
+    # 时间窗口生成
     for t in range(-10,21):
         if df_3.apply(cal_win, axis=1, args=(df_1,t)).empty:
             df_3.loc[:,str(t)] = pd.Series([np.nan for _ in range(df_3.shape[0])])
-            # print('某天没有某类型')
         else:
-            df_3.loc[:,str(t)] = df_3.apply(cal_win, axis=1, args=(df_1,t))
+            tqdm.pandas()
+            df_3.loc[:,str(t)] = df_3.progress_apply(cal_win, axis=1, args=(df_1,t))
             
     index1 = df_3[df_3['type_agg']=='type1']['market_time']
     index2 = df_3[df_3['type_agg']=='type2']['market_time']
@@ -139,7 +137,7 @@ def gerner_win(args):
     type_8_avg_1 = type_8_gr.mean(axis = 0)
 
     # 一级平均
-    return (i,j,type_1_avg_1,type_2_avg_1,type_7_avg_1,type_8_avg_1)
+    return type_1_avg_1,type_2_avg_1,type_7_avg_1,type_8_avg_1
 
 def norm(df):
     for k in range(df.shape[0]):
