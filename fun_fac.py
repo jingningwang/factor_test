@@ -10,11 +10,12 @@ def get_files_by_subfolder(folder_path,n):
     input:
     folder_path: 要遍历的文件夹路径
     output:
-    
+    ceshi
     文件夹中指定部分的 json文件,并合成大的 dataframe
     """
     subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
     subfolders.sort()
+    print('t')
     all_dataframes = []
     for root in subfolders[:1]:
         files_in_subfolder = [os.path.join(root,filename) for filename in os.listdir(root)]
