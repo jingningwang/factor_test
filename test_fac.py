@@ -44,6 +44,11 @@ if __name__ == "__main__":
     res7_df = pd.concat(res7_list)
     res8_df = pd.concat(res8_list)
 
+    cor_1 = cal_cor(res1_df)
+    cor_2 = cal_cor(res2_df)
+    cor_7 = cal_cor(res7_df)
+    cor_8 = cal_cor(res8_df)
+
     type_1_avg_2 = res1_df.mean(axis=1)
     type_2_avg_2 = res2_df.mean(axis=1)
     type_7_avg_2 = res7_df.mean(axis=1)
