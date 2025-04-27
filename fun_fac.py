@@ -10,12 +10,10 @@ def get_files_by_subfolder(folder_path,n):
     input:
     folder_path: 要遍历的文件夹路径
     output:
-    ceshi
-    文件夹中指定部分的 json文件,并合成大的 dataframe
+    该文件夹中部分或者所有日期，股票数据，返回一个dataframe
     """
     subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
     subfolders.sort()
-    print('t')
     all_dataframes = []
     for root in subfolders[:1]:
         files_in_subfolder = [os.path.join(root,filename) for filename in os.listdir(root)]
@@ -27,6 +25,7 @@ def get_files_by_subfolder(folder_path,n):
 
 def cal_wei_price(df):
     """
+    计算trade文件中部分行的加权交易价格
     input:
     df : 包含'trade_price'和'trade_volume'列的 DataFrame
     output:
@@ -39,6 +38,13 @@ def cal_wei_price(df):
     return total_sum/sum_vol if sum_vol != 0 else 0
 
 def cal_type(series):
+    """
+    计算每个挂单的类型
+    input:
+    series: 挂单数据，包含挂单类型，挂单价，挂单量，快照买，快照卖
+    output:
+    series: 该挂单的类型，包含4种类型或者‘other’
+    """
     cur_flag = series['flag']
     cur_price = series['price']
     cur_vol = series['volume']
@@ -62,6 +68,15 @@ def cal_type(series):
             return 'other'
 
 def cal_win(series,df_1,t):
+    """
+    对每个类型的挂单，计算特定窗口的加权交易价
+    input:
+    series: 挂单数据
+    df_1: 交易信息
+    t: 时间窗口平移量
+    output:
+    某个窗口的加权交易价
+    """
     cur_time = series['market_time']
     cor_time = cur_time + np.timedelta64(t, 's')
     cor_trade = df_1[df_1['timestamp'] == cor_time]
@@ -82,15 +97,19 @@ def gerner_win(df_1,df_2,df_3):
     output:
     四种类型的交易价时间窗口
     """
-    start_time = df_1.loc[0]['timestamp'] + np.timedelta64(910,'s')
-    end_time = df_1.iloc[-1]['timestamp'] + np.timedelta64(-201,'s')
     df_3 = df_3.sort_values(by=['code','market_time'],ascending=[True,True])
     order_snap_df = pd.merge(df_3,df_2,on=['market_time','code'],how='left')
     order_snap_df.ffill(inplace=True)
-    order_snap_df = order_snap_df[(order_snap_df['market_time']>start_time) & (order_snap_df['market_time']<end_time)]
+
+    order_snap_df.dropna(subset=['buy_delegations'],inplace=True)
+    order_snap_df['buy_delegations'] = order_snap_df['buy_delegations'].apply(lambda x: x if 'price' in x[0] else np.nan)
+    order_snap_df.dropna(subset=['buy_delegations'],inplace=True)
+    order_snap_df = order_snap_df.reset_index(drop=True)
+
 
     # 进行类型划分
-    order_snap_df['type_agg'] = order_snap_df.apply(cal_type,axis=1)
+    tqdm.pandas()
+    order_snap_df['type_agg'] = order_snap_df.progress_apply(cal_type,axis=1)
     df_3 = order_snap_df[order_snap_df['type_agg']!='other']
     df_3 = df_3.copy()
 
@@ -100,7 +119,8 @@ def gerner_win(df_1,df_2,df_3):
             # 该挂单对应时间没有交易信息, 返回空 dataframe
             df_3.loc[:,str(t)] = pd.Series([np.nan for _ in range(df_3.shape[0])])
         else:
-            df_3.loc[:,str(t)] = df_3.apply(cal_win, axis=1, args=(df_1,t))
+            tqdm.pandas()
+            df_3.loc[:,str(t)] = df_3.progress_apply(cal_win, axis=1, args=(df_1,t))
 
     time_win = ['code','market_time']
     time_win.extend( [str(i) for i in range(-10,21)])
