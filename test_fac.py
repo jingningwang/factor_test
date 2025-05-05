@@ -42,7 +42,6 @@ if __name__ == "__main__":
     res2_list.append(res2)
     res7_list.append(res7)
     res8_list.append(res8)
-
     res1_df = pd.concat(res1_list,axis=1)
     res2_df = pd.concat(res2_list,axis=1)
     res7_df = pd.concat(res7_list,axis=1)

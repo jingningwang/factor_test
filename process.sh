@@ -38,7 +38,6 @@ while [[ "$current_date" < "$end_date" ]]; do
       # 如果已经收集到三个文件路径，调用 Python 脚本
       if [ ${#file_paths[@]} -eq 3 ]; then
         echo "Processing files: ${file_paths[@]}"
-
         python test_fac.py "${file_paths[@]}"
         file_paths=()  # 清空文件路径列表，准备下一个批次
       fi
