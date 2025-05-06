@@ -7,6 +7,7 @@ from itertools import zip_longest
 import multiprocessing
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
+from setuptools.sandbox import save_path
 from tqdm import tqdm
 from fun_fac import *
 import sys
@@ -26,17 +27,17 @@ if __name__ == "__main__":
     df_1 = pd.read_json(file_paths[0])
     df_2 = pd.read_json(file_paths[1])
     df_3 = pd.read_json(file_paths[2])
-        # df_1 = get_files_by_subfolder(folder_path_1,n)
-        # df_2 = get_files_by_subfolder(folder_path_2,n)
-        # df_3 = get_files_by_subfolder(folder_path_3,n)
-
+    # 只保留部分重要的列
     list_1 = ['code','timestamp','trade_price','trade_volume','trade_value']
     list_2 = ['market_time', 'code','buy_delegations','sell_delegations']
     list_3 = ['code','flag','price', 'volume','market_time']
     df_1 = df_1[list_1]
     df_2 = df_2[list_2]
     df_3 = df_3[list_3]
-
+    # 去除集合竞价阶段
+    df_1 = cut_time(df_1)
+    df_2 = cut_time(df_2)
+    df_3 = cut_time(df_3)
     res1, res2, res7, res8 = gerner_win(df_1,df_2,df_3)
     res1_list.append(res1)
     res2_list.append(res2)
@@ -46,26 +47,29 @@ if __name__ == "__main__":
     res2_df = pd.concat(res2_list,axis=1)
     res7_df = pd.concat(res7_list,axis=1)
     res8_df = pd.concat(res8_list,axis=1)
-    cor_1 = cal_cor(res1_df)
-    cor_2 = cal_cor(res2_df)
-    cor_7 = cal_cor(res7_df)
-    cor_8 = cal_cor(res8_df)
+
     type_1_avg_2 = res1_df.mean(axis=1)
     type_2_avg_2 = res2_df.mean(axis=1)
     type_7_avg_2 = res7_df.mean(axis=1)
     type_8_avg_2 = res8_df.mean(axis=1)
 
-    series_list = [type_1_avg_2[:31], type_2_avg_2[:31], type_7_avg_2[:31], type_8_avg_2[:31]]
-    fig,axes = plt.subplots(2,2,figsize=(15,8))
-    for i,(ax,s) in enumerate(zip(axes.flat,series_list)):
-        ax.plot(s.index,s.values,marker='o')
-        if (i ==2) or (i==3):
-            ax.set_title(f'type{i+5}')
-        else:
-            ax.set_title(f"type{i+1}")
-        ax.grid(True)
-    plt.tight_layout()
-    plt.savefig('type.png')
+    result = pd.concat([type_1_avg_2,type_2_avg_2,type_7_avg_2,type_8_avg_2],axis=1)
+    name = "_".join(file_paths[0].split(os.sep)[-2:])
+    save_path = "/result"
+    final_path = os.path.join(save_path, name)
+    result.to_json(f"{final_path})
+
+    # series_list = [type_1_avg_2[:31], type_2_avg_2[:31], type_7_avg_2[:31], type_8_avg_2[:31]]
+    # fig,axes = plt.subplots(2,2,figsize=(15,8))
+    # for i,(ax,s) in enumerate(zip(axes.flat,series_list)):
+    #     ax.plot(s.index,s.values,marker='o')
+    #     if (i ==2) or (i==3):
+    #         ax.set_title(f'type{i+5}')
+    #     else:
+    #         ax.set_title(f"type{i+1}")
+    #     ax.grid(True)
+    # plt.tight_layout()
+    # plt.savefig('type.png')
 
 
 
