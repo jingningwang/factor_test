@@ -7,7 +7,7 @@ from itertools import zip_longest
 import multiprocessing
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
-from setuptools.sandbox import save_path
+# from setuptools.sandbox import save_path
 from tqdm import tqdm
 from fun_fac import *
 import sys
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     name = "_".join(file_paths[0].split(os.sep)[-2:])
     save_path = "/result"
     final_path = os.path.join(save_path, name)
-    result.to_json(f"{final_path})
+    result.to_json(f"{final_path}")
 
     # series_list = [type_1_avg_2[:31], type_2_avg_2[:31], type_7_avg_2[:31], type_8_avg_2[:31]]
     # fig,axes = plt.subplots(2,2,figsize=(15,8))

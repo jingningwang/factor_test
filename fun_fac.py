@@ -181,7 +181,6 @@ def gerner_win(df_1,df_2,df_3):
     type_7_gr = norm(type_7_gr)
     type_8_gr = norm(type_8_gr)
 
-
     type_1_avg_1 = type_1_gr.mean(axis = 0)
     type_2_avg_1 = type_2_gr.mean(axis = 0)
     type_7_avg_1 = type_7_gr.mean(axis = 0)
