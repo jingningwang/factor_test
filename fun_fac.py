@@ -27,23 +27,18 @@ def get_files_by_subfolder(folder_path,n):
 
 
 def load_and_process_data(file_path):
-
     with open(file_path, 'r') as f:
         data = json.load(f)
-    for record in data:
-        record['tick_time'] = pd.to_datetime(record['tick_time'], format='%Y%m%d%H%M%S%f', errors='coerce')
-    return pd.DataFrame(data)
+    df = pd.json_normalize(data)
+    df['tick_time'] = pd.to_datetime(df['tick_time'], format='%Y%m%d%H%M%S%f', errors='coerce')
+    # 如果列中存在其他时间字段，批量转换
+    for col in ['market_time', 'timestamp']:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+    return df
 
 def cut_time(df):
     # 对传进来的数据集，去掉集合竞价阶段
-    # if 'timestamp' in df.columns:
-    #     start_time = df.iloc[0]['timestamp'] + np.timedelta64(910, 's')
-    #     end_time = df.iloc[-1]['timestamp'] + np.timedelta64(-210, 's')
-    #     df = df[(df['timestamp'] > start_time) & (df['timestamp'] < end_time)]
-    # else:
-    #     start_time = df.iloc[0]['market_time'] + np.timedelta64(910, 's')
-    #     end_time = df.iloc[-1]['market_time'] + np.timedelta64(-210, 's')
-    #     df = df[(df['market_time'] > start_time) & (df['market_time'] < end_time)]
     start_time = df['tick_time'].min() + np.timedelta64(910, 's')
     end_time = df['tick_time'].max() + np.timedelta64(-210, 's')
     df = df[(df['tick_time'] > start_time) & (df['tick_time'] < end_time)]
@@ -78,18 +73,20 @@ def cal_type(df):
     bid_1 = df['buy_delegations'].apply(lambda x: x[0]['price'])
     df['bid_1']=bid_1
     bid_vol_1 = df['buy_delegations'].apply(lambda x: x[0]['volume'])
+    df['bid_vol_1']=bid_vol_1
 
     ask_1 = df['sell_delegations'].apply(lambda x: x[0]['price'])
     df['ask_1']=ask_1
     ask_vol_1 = df['sell_delegations'].apply(lambda x: x[0]['volume'])
+    df['ask_vol_1']=ask_vol_1
 
     # 创建条件判断
     # 对于买单（cur_flag == 'B'）
     condition_b_type1 = (cur_flag == 'B') & (cur_price > ask_1) & (cur_vol > ask_vol_1)
     condition_b_type2 = (cur_flag == 'B') & (cur_price == ask_1) & (cur_vol > ask_vol_1)
     # 对于卖单（cur_flag != 'B'）
-    condition_s_type7 = (cur_flag != 'B') & (cur_price < bid_1) & (cur_vol > bid_vol_1)
-    condition_s_type8 = (cur_flag != 'B') & (cur_price == bid_1) & (cur_vol > bid_vol_1)
+    condition_s_type7 = (cur_flag == 'S') & (cur_price < bid_1) & (cur_vol > bid_vol_1)
+    condition_s_type8 = (cur_flag == 'S') & (cur_price == bid_1) & (cur_vol > bid_vol_1)
 
     # 使用 np.select 来向量化处理不同类型
     df['type_agg'] = np.select(
@@ -110,9 +107,10 @@ def cal_win(row,df_1,t):
     output:
     某个窗口的加权交易价
     """
-    current_time = row['market_time']
+    current_time = row['market_time_x']
     cor_time = current_time + np.timedelta64(t, 's')
-    weight_price_t = df_1[df_1['timestamp']<=cor_time].iloc[-1:]['weighted_price']
+    # 当前挂单时间，可能没有进行交易，只有撤单
+    weight_price_t = df_1[df_1['timestamp'] <= cor_time].iloc[-1:]['weighted_price']
     if not weight_price_t.empty:
         return weight_price_t.iloc[0]
     else:
@@ -140,23 +138,23 @@ def gerner_win(df_1,df_2,df_3):
     # order_snap_df.dropna(subset=['sell_delegations'],inplace=True)
 
     # 部分数据集有快照字段，但没有具体的数据
-    # order_snap_df['buy_delegations'] = order_snap_df['buy_delegations'].apply(lambda x: x if 'price' in x[0] else np.nan)
-    # order_snap_df['sell_delegations'] = order_snap_df['sell_delegations'].apply(lambda x: x if 'price' in x[0] else np.nan)
-    # order_snap_df.dropna(subset=['buy_delegations'],inplace=True)
-    # order_snap_df.dropna(subset=['sell_delegations'],inplace=True)
-    # order_snap_df = order_snap_df.reset_index(drop=True)
+    order_snap_df['buy_delegations'] = order_snap_df['buy_delegations'].apply(lambda x: x if 'price' in x[0] else np.nan)
+    order_snap_df['sell_delegations'] = order_snap_df['sell_delegations'].apply(lambda x: x if 'price' in x[0] else np.nan)
+    order_snap_df.dropna(subset=['buy_delegations'],inplace=True)
+    order_snap_df.dropna(subset=['sell_delegations'],inplace=True)
+    order_snap_df = order_snap_df.reset_index(drop=True)
 
     # 进行类型划分
     order_snap_df = cal_type(order_snap_df)
     # 生成窗口快照
-    # 这地方一定要注意先生成窗口快照，然后再筛选类型
+    # 这地方一定要注意先生成窗口快照，然后再筛选类型，窗口应该是不准的, 这里生成的是不准的。
     for k in range(-10,21):
         order_snap_df[str(k) + 'ask_1'] = order_snap_df['ask_1'].shift(-k)
         order_snap_df[str(k) + 'bid_1'] = order_snap_df['bid_1'].shift(-k)
 
-    df_3 = order_snap_df[order_snap_df['type_agg']!='other']
-    df_3 = df_3.drop_duplicates(subset='market_time_y', keep='first')
-    df_3 = df_3.copy()
+    order_snap_df = order_snap_df[order_snap_df['type_agg'] != 'other']
+    order_snap_df= order_snap_df.drop_duplicates(subset='market_time_y', keep='first')
+    df_3 = order_snap_df.copy()
     # 对于交易数据生成每个时刻的交易价，返回的是分组之后的 df
 
     df_1 = cal_wei_price(df_1)
@@ -167,7 +165,7 @@ def gerner_win(df_1,df_2,df_3):
         else:
             df_3.loc[:,str(t)] = df_3.apply(cal_win, axis=1, args=(df_1,t))
 
-    time_win = ['code','market_time','ask_1','bid_1']
+    time_win = ['code_x','price','volume','market_time_x','market_time_y','ask_1','bid_1','ask_vol_1','bid_vol_1']
     time_win.extend([str(i) for i in range(-10,21)])
     time_win.extend([str(i)+'bid_1' for i in range(-10, 21)])
     time_win.extend([str(i)+'ask_1'for i in range(-10, 21)])
@@ -177,24 +175,19 @@ def gerner_win(df_1,df_2,df_3):
     type7_win = df_3[df_3['type_agg']=='type7'][time_win]
     type8_win = df_3[df_3['type_agg']=='type8'][time_win]
 
-    type_1_gr = type1_win.groupby(['code','market_time']).min()
-    type_2_gr = type2_win.groupby(['code','market_time']).min()
-    type_7_gr = type7_win.groupby(['code','market_time']).min()
-    type_8_gr = type8_win.groupby(['code','market_time']).min()
-
-    # 计算回复率窗口
-    type_1_gr = return_rate_1(type_1_gr)
-    type_2_gr = return_rate_1(type_2_gr)
-    type_7_gr = return_rate_2(type_7_gr)
-    type_8_gr = return_rate_2(type_8_gr)
-
+    # # 计算回复率窗口
+    type_1_gr = return_rate_3(type1_win)
+    type_2_gr = return_rate_3(type2_win)
+    type_7_gr = return_rate_4(type7_win)
+    type_8_gr = return_rate_4(type8_win)
+    #
     cut_columns = [str(t) for t in range(-10,21)]
-    cut_columns.extend(['rr' + str(t) for t in range(1, 16)])
+    cut_columns.extend(['rr_' + str(t) for t in range(1, 16)])
     type_1_gr= type_1_gr[cut_columns]
     type_2_gr= type_2_gr[cut_columns]
     type_7_gr= type_7_gr[cut_columns]
     type_8_gr= type_8_gr[cut_columns]
-    # 正则化过程
+    # # 正则化过程
     type_1_gr = norm(type_1_gr)
     type_2_gr = norm(type_2_gr)
     type_7_gr = norm(type_7_gr)
@@ -206,19 +199,18 @@ def gerner_win(df_1,df_2,df_3):
     type_8_avg_1 = type_8_gr.mean(axis = 0)
 
     # 一级平均
+    # return type1_win, type2_win, type7_win, type8_win
     return type_1_avg_1,type_2_avg_1,type_7_avg_1,type_8_avg_1
 
+
 def norm(df):
-    for k in range(df.shape[0]):
-        if df.iloc[k,10]== 0:
-            for i in range(0,31):
-                df.iloc[k,i] += 100 
-        else:
-            for i in range(0,10):
-                df.iloc[k,i] = df.iloc[k,i] *100 / df.iloc[k,10]
-            for i in range(11,31):
-                df.iloc[k,i] = df.iloc[k,i] *100 / df.iloc[k,10]
-            df.iloc[k,10] = 100
+    # 先对 df 的 '0' 列为 0 的行进行处理，避免逐行处理
+    df.loc[:,'0'] = np.where(df['0'] == 0, df['0'] + 100, df['0'])
+    # 对于非零 '0' 列的行，将对应列的值除以 '0' 列的值，并乘以 100
+    cols = [str(i) for i in range(-10, 0)] + [str(i) for i in range(1, 21)]
+    df.loc[:,cols] = df.loc[:,cols].divide(df['0'], axis=0) * 100
+    # 将 '0' 列的值设置为 100
+    df.loc[:,'0'] = 100
     return df
 
 def cal_cor(df):
@@ -263,3 +255,22 @@ def return_rate_2(df):
         rr = sell/buy -1
         df['rr' + str(k)] = rr
     return df
+
+def return_rate_3(df):
+    for k in range(1,16):
+        sell = df['0']
+        buy = df[str(k)]
+        rr = sell/buy -1
+        df['rr_' + str(k)] = rr
+    return df
+
+def return_rate_4(df):
+    for k in range(1,16):
+        buy = df['0']
+        sell = df[str(k)]
+        rr = sell/buy -1
+        df['rr_' + str(k)] = rr
+    return df
+
+
+

@@ -2,9 +2,11 @@
   <dictionary name="project">
     <words>
       <w>bfill</w>
+      <w>cumret</w>
       <w>dropna</w>
       <w>ffill</w>
       <w>gerner</w>
+      <w>logret</w>
     </words>
   </dictionary>
 </component>
